@@ -187,6 +187,19 @@ We test our approach on the `CIFAR-10` dataset with the intention to extend our 
   * CIFAR10
     * ```swin_cifar10_patch2_input32``` - 91.10 @ 32
 
+Flop analysis:
+```
+total flops: 420104704
+total activations: 2113546
+number of parameter: 4124362
+| module   | #parameters or shape   | #flops   |
+|:---------|:-----------------------|:---------|
+| model    | 4.124M                 | 0.42G    |
+|  0       |  34.688K               |  0.557M  |
+|  1       |  4.087M                |  0.419G  |
+|  2       |  3.082K                |  84.48K  |
+```
+
 <hr>
 
 ## Citation
