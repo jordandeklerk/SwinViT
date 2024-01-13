@@ -1,0 +1,5 @@
+numpy==1.26.1
+seaborn==0.13.0
+torch==2.1.1
+torchvision==0.16.1
+ignite==0.4.13
