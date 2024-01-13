@@ -75,10 +75,7 @@ def get_args_parser():
     parser.add_argument('--num_workers', default=10, type=int, help='Number of data loading workers per GPU.')
     parser.add_argument("--mlp_head_in", default=192, type=int, help="input dimension going inside MLP projection head")
 
-    args = parser.parse_args()
-    if args.device is None:
-        args.device = "cuda" if torch.cuda.is_available() else "cpu"
-    return args
+    return parser
 
 
 class History:
@@ -117,7 +114,6 @@ class History:
         self._plot('val ' + key, '.-', 'val')
         self.ax.legend()
         self._end_plot(key)
-
 
 
 class Learner:
