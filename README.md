@@ -6,7 +6,7 @@
 
 1. [Highlights](#Highlights)
 2. [Requirements](#Requirements)
-3. [Supervised Training](#Training)
+3. [Usage](#Training)
 4. [Results](#Results)
 
 
@@ -170,7 +170,7 @@ pip install -r requirements.txt
 
 <hr>
 
-## Supervised Training
+## Usage
 To replicate the reported results, clone this repo
 ```shell
 cd your_directory git clone git@github.com:jordandeklerk/SwinViT-pytorch.git
