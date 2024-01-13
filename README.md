@@ -177,7 +177,7 @@ cd your_directory git clone git@github.com:jordandeklerk/SwinViT-pytorch.git
 ```
 and run the main training script
 ```shell
-python main.py 
+python train.py 
 ```
 
 <hr>
