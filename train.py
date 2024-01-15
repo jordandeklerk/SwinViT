@@ -1,23 +1,52 @@
 import numpy as np
-from collections import defaultdict
 import matplotlib.pyplot as plt
+import math
 import seaborn as sns
 import argparse
 import tqdm
 import random
+import os
+import logging
+from tqdm import tqdm
+from math import sqrt
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+from torch.optim.lr_scheduler import _LRScheduler
 import torchvision
 from torchvision import datasets, transforms
+from torch.optim import AdamW, Adam
+from torch.cuda.amp import autocast, GradScaler
+
+from typing import Tuple
+from collections import defaultdict
+
+from einops import rearrange, repeat
+from einops.layers.torch import Rearrange
+
+from functools import partial
+
+from PIL import ImageFilter, ImageOps, Image
+from fvcore.nn import FlopCountAnalysis, ActivationCountAnalysis, flop_count_table
+
+from ignite.utils import convert_tensor
+
+from timm.models.layers import DropPath, to_2tuple, trunc_normal_
+from timm.models.registry import register_model
+
+import warnings
+warnings.filterwarnings("ignore")
 
 from utils.dataloader import datainfo, dataload
 from model.swin_vit import SwinTransformer
 from utils.loss import LabelSmoothingCrossEntropy
 from utils.scheduler import build_scheduler  
 from utils.optimizer import get_adam_optimizer
+from utils.utils import clip_gradients
+from utils.utils import save_checkpoint, load_checkpoint
+from utils.cutmix import CutMix
 
 
 def get_args_parser():
@@ -53,7 +82,7 @@ def get_args_parser():
         weight decay. With ViT, a smaller value at the beginning of training works well.""")
     parser.add_argument('--batch_size', default=128, type=int,
         help='Per-GPU batch-size : number of distinct images loaded on one GPU.')
-    parser.add_argument('--epochs', default=100, type=int, help='Number of epochs of training.')
+    parser.add_argument('--epochs', default=200, type=int, help='Number of epochs of training.')
     parser.add_argument("--lr", default=0.001, type=float, help="""Learning rate at the end of
         linear warmup (highest LR used during training). The learning rate is linearly scaled
         with the batch size, and specified here for a reference batch size of 256.""")
@@ -61,6 +90,9 @@ def get_args_parser():
         help="Number of epochs for the linear learning-rate warm up.")
     parser.add_argument('--min_lr', type=float, default=1e-6, help="""Target LR at the
         end of optimization. We use a cosine LR schedule with linear warmup.""")
+    parser.add_argument('--clip_grad', type=float, default=3.0, help="""Maximal parameter
+        gradient norm if using gradient clipping. Clipping with norm .3 ~ 1.0 can
+        help optimization for larger ViT architectures. 0 for disabling.""")
     parser.add_argument('--optimizer', default='adamw', type=str,
         choices=['adamw', 'sgd', 'lars'], help="""Type of optimizer. Recommend using adamw with ViTs.""")
     parser.add_argument('--drop_path_rate', type=float, default=0.1, help="stochastic depth rate")
@@ -69,165 +101,151 @@ def get_args_parser():
     parser.add_argument('--gamma', type=float, default=1.0,
                     help='Gamma value for Cosine LR schedule')
 
+
     # Misc
     parser.add_argument('--dataset', default='CIFAR10', type=str, choices=['CIFAR10', 'CIFAR100'], help='Please specify path to the training data.')
     parser.add_argument('--seed', default=42, type=int, help='Random seed.')
-    parser.add_argument('--num_workers', default=10, type=int, help='Number of data loading workers per GPU.')
+    parser.add_argument('--num_workers', default=8, type=int, help='Number of data loading workers per GPU.')
     parser.add_argument("--mlp_head_in", default=192, type=int, help="input dimension going inside MLP projection head")
-
     return parser
 
 
-class History:
-    def __init__(self):
-        self.values = defaultdict(list)
 
-    def append(self, key, value):
-        self.values[key].append(value)
-
-    def reset(self):
-        for k in self.values.keys():
-            self.values[k] = []
-
-    def _begin_plot(self):
-        self.fig = plt.figure()
-        self.ax = self.fig.add_subplot(111)
-
-    def _end_plot(self, ylabel):
-        self.ax.set_xlabel('epoch')
-        self.ax.set_ylabel(ylabel)
-        plt.show()
-
-    def _plot(self, key, line_type='-', label=None):
-        if label is None: label=key
-        xs = np.arange(1, len(self.values[key])+1)
-        self.ax.plot(xs, self.values[key], line_type, label=label)
-
-    def plot(self, key):
-        self._begin_plot()
-        self._plot(key, '-')
-        self._end_plot(key)
-
-    def plot_train_val(self, key):
-        self._begin_plot()
-        self._plot('train ' + key, '.-', 'train')
-        self._plot('val ' + key, '.-', 'val')
-        self.ax.legend()
-        self._end_plot(key)
-
-
-class Learner:
-    def __init__(self, model, loss, optimizer, train_loader, val_loader, device,
-                 epoch_scheduler=None, batch_scheduler=None, seed=42):
-        # Set seeds for reproducibility
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-        np.random.seed(seed)
-        random.seed(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-    
+class Trainer:
+    def __init__(self, model, train_loader, val_loader, optimizer, lr_scheduler, loss_fn, device, args):
         self.model = model
-        self.loss = loss
-        self.optimizer = optimizer
         self.train_loader = train_loader
         self.val_loader = val_loader
+        self.optimizer = optimizer
+        self.lr_scheduler = lr_scheduler
+        self.loss_fn = loss_fn
         self.device = device
-        self.epoch_scheduler = epoch_scheduler
-        self.batch_scheduler = batch_scheduler
-        self.history = History()
-    
-    
-    def iterate(self, loader, msg="", backward_pass=False):
-        total_loss = 0.0
-        num_samples = 0
-        num_correct = 0
-        
-        pbar = tqdm(enumerate(loader), total=len(loader))
-        for it, (X, Y) in pbar:
-            X, Y = X.to(self.device), Y.to(self.device)
-            Y_pred = self.model(X)
-            batch_size = X.size(0)
-            batch_loss = self.loss(Y_pred, Y)
-            if backward_pass:
+        self.args = args
+        self.scaler = GradScaler()
+        self.cutmix = CutMix(loss_fn)
+
+        self.logger = logging.getLogger(__name__)
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+    def train(self):
+        print("\n--- Training Progress ---\n")
+
+        train_losses, val_losses, train_accuracies, val_accuracies = [], [], [], []
+        best_accuracy = 0.0
+
+        for epoch in range(self.args.epochs):
+            epoch_progress_bar = tqdm(total=len(self.train_loader) + len(self.val_loader), desc=f"Epoch {epoch + 1}/{self.args.epochs}")
+
+            # Training Phase
+            self.model.train()
+            total_train_loss, total_train_correct = 0.0, 0
+            for batch in self.train_loader:
+                images, labels = self.cutmix.prepare_batch(batch, self.device, non_blocking=True)
                 self.optimizer.zero_grad()
-                batch_loss.backward()
-                self.optimizer.step()
-                if self.batch_scheduler is not None:
-                    self.batch_scheduler.step()
-            
-            Y_pred.detach_() # conserve memory
-            labels_pred = torch.argmax(Y_pred, -1)
-            total_loss += batch_size * batch_loss.item()
-            num_correct += (labels_pred == Y).sum().item()
-            num_samples += batch_size
-            
-            pbar.set_description(msg)
-            pbar.set_postfix(loss=total_loss / num_samples, acc=float(num_correct) / num_samples)
-    
-        avg_loss = total_loss / num_samples
-        accuracy = float(num_correct) / num_samples
-        return avg_loss, accuracy
-    
-    
-    def train(self, msg):
-        self.model.train()
-        train_loss, train_acc = self.iterate(self.train_loader, msg + ' train:', backward_pass=True)
-        self.history.append('train loss', train_loss)
-        self.history.append('train acc', train_acc)
-        return train_loss, train_acc
 
-        
-    def validate(self, msg):
-        self.model.eval()
-        with torch.no_grad():
-            val_loss, val_acc = self.iterate(self.val_loader, msg + ' val:')
-        self.history.append('val loss', val_loss)
-        self.history.append('val acc', val_acc)
-        return val_loss, val_acc
+                with autocast():
+                    outputs = self.model(images)
+                    loss = self.cutmix(outputs, labels)
 
+                self.scaler.scale(loss).backward()
 
-    def fit(self, epochs):
-        pbar = tqdm(range(epochs))
-        for e in pbar:
-            msg = f'epoch {e+1}/{epochs}'
-            train_loss, train_acc = self.train(msg)
-            val_loss, val_acc = self.validate(msg)
-            if self.epoch_scheduler is not None:
-                self.epoch_scheduler.step()
-            lr = self.optimizer.param_groups[0]['lr']
-            pbar.set_description(msg)
-            pbar.set_postfix(train_loss=train_loss, train_acc=train_acc, val_loss=val_loss, val_acc=val_acc, lr=lr)
+                if self.args.clip_grad > 0:
+                    self.scaler.unscale_(self.optimizer)
+                    clip_gradients(self.model, self.args.clip_grad)
+
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+
+                total_train_loss += loss.item()
+                _, predicted = torch.max(outputs.data, 1)
+                total_train_correct += (predicted == labels).sum().item()
+
+                epoch_progress_bar.update(1)
+
+            avg_train_loss = total_train_loss / len(self.train_loader)
+            train_accuracy = total_train_correct / len(self.train_loader.dataset)
+
+            # Validation Phase
+            self.model.eval()
+            total_val_loss, total_val_correct = 0.0, 0
+            with torch.no_grad():
+                for images, labels in self.val_loader:
+                    images, labels = images.to(self.device), labels.to(self.device)
+                    outputs = self.model(images)
+                    loss = self.loss_fn(outputs, labels)
+                    total_val_loss += loss.item()
+                    _, predicted = torch.max(outputs.data, 1)
+                    total_val_correct += (predicted == labels).sum().item()
+
+                    epoch_progress_bar.update(1)
+
+            avg_val_loss = total_val_loss / len(self.val_loader)
+            val_accuracy = total_val_correct / len(self.val_loader.dataset)
+
+            epoch_progress_bar.set_postfix({"Train Loss": avg_train_loss, "Train Acc": train_accuracy, "Val Loss": avg_val_loss, "Val Acc": val_accuracy})
+            epoch_progress_bar.close()
+
+            # Logging and Checkpointing
+            self.logger.info(f"Epoch {epoch + 1}/{self.args.epochs}: Train Loss: {avg_train_loss:.4f}, Train Acc: {train_accuracy:.4f}, Val Loss: {avg_val_loss:.4f}, Val Acc: {val_accuracy:.4f}")
+            if val_accuracy > best_accuracy:
+                best_accuracy = val_accuracy
+                save_checkpoint(self.model, self.optimizer, self.lr_scheduler, epoch, self.args.checkpoint_dir, best=True)
+                self.logger.info(f"New best accuracy: {best_accuracy:.4f}, Model saved as 'best_model.pth'")
+
+            self.lr_scheduler.step()
+
+        return train_losses, val_losses, train_accuracies, val_accuracies
 
 
 def main():
     args, unknown = get_args_parser().parse_known_args()
+    args.checkpoint_dir = "your dir"
+
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed(args.seed)
+    np.random.seed(args.seed)
+    random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
 
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-    data_info = datainfo(args)
-    normalize = [transforms.Normalize(mean=data_info['stat'][0], std=data_info['stat'][1])]
+    print("\n--- GPU Information ---\n")
 
-    train_dataset, val_dataset = dataload(args, normalize, data_info)   
+    if torch.cuda.is_available():
+        print(f"Model is using device: {device}")
+        print(f"CUDA Device: {torch.cuda.get_device_name(device)}")
+        print(f"Total Memory: {torch.cuda.get_device_properties(device).total_memory / 1024 ** 2} MB")
+    else:
+        print("Model is using CPU")
+
+    print("\n--- Downloading Data ---\n")
+
+    train_dataset, val_dataset = dataload(args)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
                                                 num_workers=args.num_workers, pin_memory=True)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, 
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False,
                                                 num_workers=args.num_workers, pin_memory=True)
 
-    model = SwinTransformer(args.num_classes, args.image_size,
-                        num_blocks_list=[4, 4], dims=[128, 128, 256],
-                        head_dim=32, patch_size=args.patch_size, window_size=4,
-                        emb_p_drop=0., trans_p_drop=0., head_p_drop=0.3).to(device)
+    model = SwinTransformer(img_size=args.image_size,
+                        num_classes=args.num_classes,
+                        window_size=4, 
+                        patch_size=args.patch_size, 
+                        embed_dim=96, 
+                        depths=[2, 6, 4], 
+                        num_heads=[3, 6, 12],
+                        mlp_ratio=args.vit_mlp_ratio, 
+                        qkv_bias=True, 
+                        drop_path_rate=args.drop_path_rate).to(device)
 
-    loss = LabelSmoothingCrossEntropy()
+    # loss = LabelSmoothingCrossEntropy()
+    loss = nn.CrossEntropyLoss(label_smoothing=0.1)
     optimizer = get_adam_optimizer(model.parameters(), lr=args.lr, wd=args.weight_decay)
     lr_scheduler = build_scheduler(args, optimizer)
-    
-    learner = Learner(model, loss, optimizer, train_loader, val_loader, device)
-    learner.batch_scheduler = lr_scheduler
 
-    learner.fit(args.epochs)
+    Trainer(model, train_loader, val_loader, optimizer, lr_scheduler, loss, device, args).train()
 
 if __name__ == "__main__":
     main()
