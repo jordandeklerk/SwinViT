@@ -181,12 +181,13 @@ class Trainer:
 
             avg_val_loss = total_val_loss / len(self.val_loader)
             val_accuracy = total_val_correct / len(self.val_loader.dataset)
+            current_lr = self.optimizer.param_groups[0]['lr']
 
-            epoch_progress_bar.set_postfix({"Train Loss": avg_train_loss, "Train Acc": train_accuracy, "Val Loss": avg_val_loss, "Val Acc": val_accuracy})
+            epoch_progress_bar.set_postfix({"Train Loss": avg_train_loss, "Train Acc": train_accuracy, "Val Loss": avg_val_loss, "Val Acc": val_accuracy, "LR": current_lr})
             epoch_progress_bar.close()
 
             # Logging and Checkpointing
-            self.logger.info(f"Epoch {epoch + 1}/{self.args.epochs}: Train Loss: {avg_train_loss:.4f}, Train Acc: {train_accuracy:.4f}, Val Loss: {avg_val_loss:.4f}, Val Acc: {val_accuracy:.4f}")
+            self.logger.info(f"Epoch {epoch + 1}/{self.args.epochs}: Train Loss: {avg_train_loss:.4f}, Train Acc: {train_accuracy:.4f}, Val Loss: {avg_val_loss:.4f}, Val Acc: {val_accuracy:.4f}, LR: {current_lr:.4f}")
             if val_accuracy > best_accuracy:
                 best_accuracy = val_accuracy
                 save_checkpoint(self.model, self.optimizer, self.lr_scheduler, epoch, self.args.checkpoint_dir, best=True)
