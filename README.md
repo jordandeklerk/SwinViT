@@ -143,6 +143,41 @@ We test our approach on the `CIFAR-10` dataset with the intention to extend our 
   * CIFAR10
     * ```swin_cifar10_patch2_input32``` - 91.10 @ 32
 
+Model summary:
+```
+==================================================================================================
+Layer (type:depth-idx)                             Kernel Shape     Output Shape     Param #
+==================================================================================================
+SwinTransformer                                    --               [1, 10]          --
+├─PatchEmbed: 1-1                                  --               [1, 256, 96]     --
+│    └─Conv2d: 2-1                                 [2, 2]           [1, 96, 16, 16]  1,248
+│    └─LayerNorm: 2-2                              --               [1, 256, 96]     192
+├─Dropout: 1-2                                     --               [1, 256, 96]     --
+├─ModuleList: 1-3                                  --               --               --
+│    └─BasicLayer: 2-3                             --               [1, 64, 192]     --
+│    │    └─ModuleList: 3-1                        --               --               149,862
+│    │    └─PatchMerging: 3-2                      --               [1, 64, 192]     74,496
+│    └─BasicLayer: 2-4                             --               [1, 16, 384]     --
+│    │    └─ModuleList: 3-3                        --               --               1,783,908
+│    │    └─PatchMerging: 3-4                      --               [1, 16, 384]     296,448
+│    └─BasicLayer: 2-5                             --               [1, 16, 384]     --
+│    │    └─ModuleList: 3-5                        --               --               4,737,840
+├─LayerNorm: 1-4                                   --               [1, 16, 384]     768
+├─AdaptiveAvgPool1d: 1-5                           --               [1, 384, 1]      --
+├─Linear: 1-6                                      --               [1, 10]          3,850
+==================================================================================================
+Total params: 7,048,612
+Trainable params: 7,048,612
+Non-trainable params: 0
+Total mult-adds (M): 11.15
+==================================================================================================
+Input size (MB): 0.01
+Forward/backward pass size (MB): 11.50
+Params size (MB): 28.18
+Estimated Total Size (MB): 39.69
+==================================================================================================
+```
+
 Flop analysis:
 ```
 total flops: 242759424
