@@ -1,5 +1,5 @@
-torch==1.10.0
-torchvision==0.11.1
-timm==0.4.12
-numpy==1.19.5
-einops==0.3.2
+torch
+torchvision
+timm
+numpy
+einops
