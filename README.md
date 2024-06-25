@@ -40,7 +40,7 @@ Create a virtual environment and clone this repository:
 
 ```bash
 # Clone the repository
-git clone git@github.com:jordandeklerk/SwinViT.git
+git clone https://github.com/jordandeklerk/SwinViT.git
 cd SwinViT
 
 # Create a virtual environment

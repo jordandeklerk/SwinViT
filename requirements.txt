@@ -1,5 +1,11 @@
+numpy
+matplotlib
+seaborn
+tqdm
 torch
 torchvision
-timm
-numpy
 einops
+Pillow
+fvcore
+ignite
+timm
