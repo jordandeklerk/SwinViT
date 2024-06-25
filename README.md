@@ -41,7 +41,7 @@ Create a virtual environment and clone this repository:
 ```bash
 # Clone the repository
 git clone git@github.com:jordandeklerk/SwinViT.git
-cd Swin-ViT
+cd SwinViT
 
 # Create a virtual environment
 python3 -m venv myenv
