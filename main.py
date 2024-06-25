@@ -29,7 +29,6 @@ from einops.layers.torch import Rearrange
 from functools import partial
 
 from PIL import ImageFilter, ImageOps, Image
-from fvcore.nn import FlopCountAnalysis, ActivationCountAnalysis, flop_count_table
 
 from ignite.utils import convert_tensor
 
