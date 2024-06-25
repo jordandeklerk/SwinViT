@@ -196,8 +196,6 @@ def main():
     
     args = parser.parse_args()
 
-    os.makedirs(args.checkpoint_dir, exist_ok=True)
-
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
     np.random.seed(args.seed)
