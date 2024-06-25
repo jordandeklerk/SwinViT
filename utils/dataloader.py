@@ -40,7 +40,7 @@ def datainfo(args):
     
     return data_info
 
-def dataload(args, normalize, data_info):
+def dataload(args, data_info):
 
     train_transform = transforms.Compose([
     transforms.TrivialAugmentWide(interpolation=transforms.InterpolationMode.BILINEAR),
@@ -58,8 +58,7 @@ def dataload(args, normalize, data_info):
         val_dataset = datasets.CIFAR10(
             root=args.dir, train=False, download=True, transform=transforms.Compose([
             transforms.Resize(data_info['img_size']),
-            transforms.ToTensor(),
-            *normalize]))
+            transforms.ToTensor()]))
         
     elif args.dataset == 'CIFAR100':
 
@@ -68,8 +67,7 @@ def dataload(args, normalize, data_info):
         val_dataset = datasets.CIFAR100(
             root=args.dir, train=False, download=True, transform=transforms.Compose([
             transforms.Resize(data_info['img_size']),
-            transforms.ToTensor(),
-            *normalize]))
+            transforms.ToTensor()]))
         
     elif args.dataset == 'SVHN':
 
@@ -78,8 +76,7 @@ def dataload(args, normalize, data_info):
         val_dataset = datasets.SVHN(
             root=args.dir, split='test', download=True, transform=transforms.Compose([
             transforms.Resize(data_info['img_size']),
-            transforms.ToTensor(),
-            *normalize]))
+            transforms.ToTensor()]))
         
     elif args.dataset == 'Tiny-Imagenet':
         train_dataset = datasets.ImageFolder(
@@ -87,13 +84,13 @@ def dataload(args, normalize, data_info):
         val_dataset = datasets.ImageFolder(
             root=os.path.join(args.dir, 'val'), 
             transform=transforms.Compose([
-            transforms.Resize(data_info['img_size']), transforms.ToTensor(), *normalize]))
+            transforms.Resize(data_info['img_size']), transforms.ToTensor()]))
 
     elif args.dataset == 'CINIC':
         train_dataset = torchvision.datasets.ImageFolder(root=os.path.join(args.dir, 'train'), transform=train_transform)
         val_dataset = torchvision.datasets.ImageFolder(root=os.path.join(args.dir, 'val'),
                       transform=transforms.Compose([
-                      transforms.Resize((data_info['img_size'],data_info['img_size'])), transforms.ToTensor(), *normalize]))
+                      transforms.Resize((data_info['img_size'],data_info['img_size'])), transforms.ToTensor()]))
 
     
     return train_dataset, val_dataset

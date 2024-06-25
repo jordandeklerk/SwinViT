@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.nn as nn
 from ignite.utils import convert_tensor
 
 def reduce_loss(loss, reduction='mean'):

@@ -103,5 +103,3 @@ def build_scheduler(args, optimizer):
             gamma=args.gamma
         )
     return lr_scheduler
-
-lr_scheduler = build_scheduler(args, optimizer)

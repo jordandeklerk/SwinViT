@@ -1,58 +1,73 @@
 # Swin Transformer on CIFAR-10
 
-<hr>
-
-## Contents
-
-1. [Highlights](#Highlights)
-2. [Requirements](#Requirements)
-3. [Usage](#Usage)
-4. [Results](#Results)
-
-
-<hr>
-
 ## Highlights
-This project is a implementation from scratch of a slightly modified version of the Swin transformer introduced in the paper [Swin Transformer: Hierarchical Vision Transformer using Shifted Windows](https://arxiv.org/abs/2103.14030). We implement this model on the small scale benchmark dataset `CIFAR-10`. 
 
-**Swin Transformer** (the name `Swin` stands for **S**hifted **win**dow) is initially described in [arxiv](https://arxiv.org/abs/2103.14030), which capably serves as a general-purpose backbone for computer vision. It is basically a hierarchical Transformer whose representation is computed with shifted windows. The shifted windowing scheme brings greater efficiency by limiting self-attention
-computation to non-overlapping local windows while also allowing for cross-window connection.
+<img src="./images/swin3.png"></img>
 
-The proposed Swin Transformer builds hierarchical feature maps by merging image patches (shown in gray) in deeper layers and has linear computation complexity to input image size due to computation of self-attention only within each local window (shown in red). It can thus serve as a general-purpose backbone for both image classification and dense recognition tasks. In contrast, previous vision Transformers produce feature maps of a single low resolution and have quadratic computation complexity to input image size due to computation of self-attention globally.
+This project is an implementation of a slightly modified version of the Swin transformer introduced in the paper [Swin Transformer: Hierarchical Vision Transformer using Shifted Windows](https://arxiv.org/abs/2103.14030). We implement this model on the small scale benchmark dataset `CIFAR-10`. 
 
-<img src="./images/swin1.png" width="550"></img>
-
-Swin departs from the traditional method of computing self-attention and implements a shifted window approach for computing self-attention. In layer $l$ (left), a regular window partitioning scheme is adopted, and self-attention is computed within each window. In the next layer $l+1$ (right), the window partitioning is shifted, resulting in new windows. The self-attention computation in the new windows crosses the boundaries of the previous windows in layer $l$, providing connections among them. 
-
-<img src="./images/swin2.png" width="550"></img>
-
-The overall architecture of the Swin model can be seen below:
-
-<img src="./images/swin3.png" width="850"></img>
+**Swin Transformer** (the name `Swin` stands for **S**hifted **win**dow) is initially described in [arxiv](https://arxiv.org/abs/2103.14030), which capably serves as a general-purpose backbone for computer vision. It is basically a hierarchical Transformer whose representation is computed with shifted windows. The shifted windowing scheme brings greater efficiency by limiting self-attention computation to non-overlapping local windows while also allowing for cross-window connection.
 
 This project focuses on implementing Swin on an image classification task and shows that with modifications, supervised training of the Swin transformer model on small scale datasets like `CIFAR-10` can lead to very high accuracy with low computational constraints.
 
-<hr>
+## Project Structure
 
-## Requirements
-```shell
+```
+├── main.py
+├── model
+│   └── swin_vit.py
+├── requirements.txt
+└── utils
+    ├── autoaug.py
+    ├── cutmix.py
+    ├── dataloader.py
+    ├── loss.py
+    ├── optimizer.py
+    ├── parser.py
+    ├── random_erasing.py
+    ├── sampler.py
+    ├── scheduler.py
+    ├── train_functions.py
+    ├── transforms.py
+    └── utils.py
+```
+
+## Usage
+
+### Install Dependencies
+
+Create a virtual environment and clone this repository:
+
+```bash
+# Clone the repository
+git clone git@github.com:jordandeklerk/SwinViT.git
+cd Swin-ViT
+
+# Create a virtual environment
+python3 -m venv myenv
+
+# Activate the virtual environment
+source myenv/bin/activate
+
+# Install the required Python packages
 pip install -r requirements.txt
 ```
 
 <hr>
 
 ## Usage
-To replicate the reported results, clone this repo
-```shell
-cd your_directory git clone git@github.com:jordandeklerk/SwinViT-pytorch.git
-```
-and run the main training script
-```shell
-python train.py 
-```
-Make sure to adjust the checkpoint directory in `train.py` to store checkpoint files.
+To replicate the reported results, run `main.py` with the following hyperparameters:
 
-<hr>
+```bash
+python main.py  --patch_size 2 \
+                --weight_decay 0.1 \
+                --batch_size 128 \
+                --epochs 200 \
+                --lr 0.001 \
+                --warmup_epochs 10 \
+                --min_lr 1e-6 \
+                --clip_grad 3.0 
+```
 
 ## Results
 We test our approach on the `CIFAR-10` dataset with the intention to extend our model to 4 other small low resolution datasets: `Tiny-Imagenet`, `CIFAR100`, `CINIC10` and `SVHN`. All training took place on a single A100 GPU.
@@ -72,8 +87,6 @@ number of parameter: 7048612
 |  norm        |  0.768K                |  30.72K  |
 |  head        |  3.85K                 |  3.84K   |
 ```
-
-<hr>
 
 ## Citation
 ```bibtex
