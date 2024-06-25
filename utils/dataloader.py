@@ -1,5 +1,4 @@
 import os
-from colorama import Fore, Style
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision
