@@ -5,7 +5,5 @@ tqdm
 torch
 torchvision
 einops
-Pillow
-fvcore
-ignite
+pytorch-ignite
 timm
