@@ -1,14 +1,9 @@
 import numpy as np
-import matplotlib.pyplot as plt
-import math
-import seaborn as sns
 import argparse
 import tqdm
 import random
-import os
 import logging
 from tqdm import tqdm
-from math import sqrt
 
 import torch
 import torch.nn as nn
@@ -19,9 +14,6 @@ import torchvision
 from torchvision import datasets, transforms
 from torch.optim import AdamW, Adam
 from torch.cuda.amp import autocast, GradScaler
-
-from typing import Tuple
-from collections import defaultdict
 
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
@@ -36,7 +28,7 @@ from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 from timm.models.registry import register_model
 
 from utils.dataloader import dataload
-from model.swin_vit import SwinTransformer
+from src.swin_vit import SwinTransformer
 from utils.scheduler import build_scheduler  
 from utils.dataloader import datainfo
 from utils.optimizer import get_adam_optimizer
@@ -46,6 +38,7 @@ from utils.cutmix import CutMix
 
 import warnings
 warnings.filterwarnings("ignore")
+
 
 class Trainer:
     def __init__(self, model, train_loader, val_loader, optimizer, lr_scheduler, loss_fn, device, args):
